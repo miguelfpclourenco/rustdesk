@@ -13,6 +13,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Inject server config
+        shell: pwsh
+        run: |
+          $config = Get-Content libs/hbb_common/src/config.rs -Raw
+          $config = $config -replace 'rs-ny\.rustdesk\.com[^"]*', '${{ secrets.RENDEZVOUS_SERVER }}'
+          $config = $config -replace 'pub const RS_PUB_KEY: &str = ".*?"', 'pub const RS_PUB_KEY: &str = "${{ secrets.RS_PUB_KEY }}"'
+          Set-Content libs/hbb_common/src/config.rs $config
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -38,20 +46,10 @@ jobs:
       - name: Install flutter_rust_bridge
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid
 
-      - name: Install cargo-xwin
-        run: cargo install cargo-xwin
-
-      - name: Build Rust libs
-        run: |
-          python3 .\build.py --portable --hwcodec --flutter
+      - name: Build
+        run: python3 .\build.py --portable --hwcodec --flutter
         env:
           VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
-
-      - name: Build Flutter Windows
-        run: |
-          cd flutter
-          flutter pub get
-          flutter build windows --release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -66,6 +64,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Inject server config
+        run: |
+          sed -i '' 's/rs-ny\.rustdesk\.com[^"]*/'"${{ secrets.RENDEZVOUS_SERVER }}"'/g' libs/hbb_common/src/config.rs
+          sed -i '' 's/pub const RS_PUB_KEY: \&str = ".*"/pub const RS_PUB_KEY: \&str = "'"${{ secrets.RS_PUB_KEY }}"'"/g' libs/hbb_common/src/config.rs
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -78,15 +81,13 @@ jobs:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
       - name: Install dependencies
-        run: |
-          brew install nasm yasm cmake wget
+        run: brew install nasm yasm cmake wget
 
       - name: Install flutter_rust_bridge
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid
 
       - name: Build
-        run: |
-          python3 build.py --flutter
+        run: python3 build.py --flutter
 
       - name: Build Flutter macOS
         run: |
