@@ -5,9 +5,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build-windows:
     runs-on: windows-2022
@@ -16,45 +13,89 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
 
       - name: Install vcpkg dependencies
         run: |
           vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
         env:
-          VCPKG_ROOT: C:\vcpkg
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
 
-      - name: Build Windows
-        run: cargo build --release
+      - name: Install flutter_rust_bridge
+        run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid
+
+      - name: Install cargo-xwin
+        run: cargo install cargo-xwin
+
+      - name: Build Rust libs
+        run: |
+          python3 .\build.py --portable --hwcodec --flutter
         env:
-          VCPKG_ROOT: C:\vcpkg
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+
+      - name: Build Flutter Windows
+        run: |
+          cd flutter
+          flutter pub get
+          flutter build windows --release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-windows
-          path: target/release/rustdesk.exe
+          path: flutter/build/windows/x64/runner/Release/
 
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
 
       - name: Install dependencies
         run: |
-          brew install nasm yasm cmake
+          brew install nasm yasm cmake wget
 
-      - name: Build macOS
-        run: cargo build --release
+      - name: Install flutter_rust_bridge
+        run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid
+
+      - name: Build
+        run: |
+          python3 build.py --flutter
+
+      - name: Build Flutter macOS
+        run: |
+          cd flutter
+          flutter pub get
+          flutter build macos --release
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-macos
-          path: target/release/rustdesk
+          path: flutter/build/macos/Build/Products/Release/RustDesk.app
